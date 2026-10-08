@@ -1,0 +1,110 @@
+{
+  "_comment": "Rules are matched in order against '<mount>/<path>' (case-insensitive regex). FIRST MATCH WINS, so put specific rules above general ones. Named groups like (?P<owner>...) can be used in 'set' as {owner}. Also available: {mount}, {path}, {basename}. 'confidence' drives auto-approval in the plan. Use \"action\": \"skip\" to leave matching secrets alone. EDIT THE REGEXES TO MATCH YOUR PATH CONVENTIONS.",
+
+  "defaults": {
+    "auto_approve_min_confidence": "medium",
+    "tags": {
+      "review_status": "auto-inferred",
+      "tagged_by": "vault_tagger"
+    }
+  },
+
+  "rules": [
+    {
+      "name": "skip-scratch",
+      "action": "skip",
+      "match": { "path_regex": "(^|/)(tmp|scratch|sandbox|test)/" }
+    },
+
+    {
+      "name": "config-non-expiring",
+      "confidence": "medium",
+      "match": {
+        "path_regex": "(^|[/_-])(db[-_]?name|database[-_]?name|hostname|host|port|endpoint|region)$"
+      },
+      "set": { "type": "config" }
+    },
+
+    {
+      "name": "service-account-by-folder",
+      "confidence": "high",
+      "match": {
+        "path_regex": "^[^/]+/service[-_]?accounts?/(?P<owner>[^/]+)/"
+      },
+      "set": {
+        "type": "service-account",
+        "owner": "{owner}",
+        "rotation_days": "90",
+        "rotation_method": "manual"
+      }
+    },
+
+    {
+      "name": "service-account-by-name",
+      "confidence": "medium",
+      "match": {
+        "path_regex": "(^|/)(svc|svcacct|svc-acct|service[-_]?account)[-_]"
+      },
+      "set": {
+        "type": "service-account",
+        "rotation_days": "90",
+        "rotation_method": "manual"
+      }
+    },
+
+    {
+      "name": "certificates-by-folder",
+      "confidence": "high",
+      "match": { "path_regex": "(^|/)(certs?|certificates?|tls|ssl|pki)/" },
+      "set": {
+        "type": "certificate",
+        "rotation_days": "365",
+        "rotation_method": "manual"
+      }
+    },
+
+    {
+      "name": "certificates-by-name",
+      "confidence": "medium",
+      "match": { "path_regex": "(cert|\\.pem$|\\.crt$|\\.pfx$|keystore)" },
+      "set": {
+        "type": "certificate",
+        "rotation_days": "365",
+        "rotation_method": "manual"
+      }
+    },
+
+    {
+      "name": "tokens-and-api-keys",
+      "confidence": "medium",
+      "match": { "path_regex": "(token|api[-_]?key|apikey|bearer|access[-_]?key)" },
+      "set": {
+        "type": "token",
+        "rotation_days": "90",
+        "rotation_method": "manual"
+      }
+    },
+
+    {
+      "name": "passwords",
+      "confidence": "medium",
+      "match": { "path_regex": "(password|passwd|(^|[/_-])pwd($|[/_-]))" },
+      "set": {
+        "type": "password",
+        "rotation_days": "90",
+        "rotation_method": "manual"
+      }
+    },
+
+    {
+      "name": "generic-credential-guess",
+      "confidence": "low",
+      "match": { "path_regex": "(credential|creds?)($|[/_-])" },
+      "set": {
+        "type": "password",
+        "rotation_days": "90",
+        "rotation_method": "manual"
+      }
+    }
+  ]
+}
