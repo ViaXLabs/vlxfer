@@ -1,0 +1,27 @@
+# Harness step template: upload a file or folder to S3 from a CI Build stage.
+#
+# Scope: ACCOUNT (no orgIdentifier / projectIdentifier below).
+#   Org scope:     add   orgIdentifier: YOUR_ORG
+#   Project scope: add   orgIdentifier: YOUR_ORG  and  projectIdentifier: YOUR_PROJECT
+#
+# Callers supply: connectorRef, region, bucket, sourcePath.
+# The S3 key is fixed so every team follows one convention:
+#   s3://<bucket>/<project id>/<pipeline id>/<run number>/<file>
+# Note: Harness's docs show the source path can also appear in the key, so check the
+# real key after the first run (PLUGIN_STRIP_PREFIX stage variable flattens it).
+template:
+  name: S3 Upload Artifact
+  identifier: S3_Upload_Artifact
+  versionLabel: 1.0.0
+  type: Step
+  description: Uploads build output to s3://BUCKET/PROJECT/PIPELINE/RUN_NUMBER/ using an AWS connector. Compress folders with a Run step first; this step does not compress.
+  tags: {}
+  spec:
+    type: S3Upload
+    timeout: 10m
+    spec:
+      connectorRef: <+input>
+      region: <+input>
+      bucket: <+input>
+      sourcePath: <+input>
+      target: <+project.identifier>/<+pipeline.identifier>/<+pipeline.sequenceId>

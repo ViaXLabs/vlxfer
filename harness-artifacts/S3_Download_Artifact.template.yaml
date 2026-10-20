@@ -1,0 +1,38 @@
+# Harness step template: download a folder from S3 into the CI stage workspace.
+# Harness has no built-in download step, so this wraps the plugins/s3 image
+# with download set to "true" (Harness's documented method).
+#
+# Scope: ACCOUNT (no orgIdentifier / projectIdentifier below).
+#   Org scope:     add   orgIdentifier: YOUR_ORG
+#   Project scope: add   orgIdentifier: YOUR_ORG  and  projectIdentifier: YOUR_PROJECT
+#
+# Callers supply:
+#   access_key / secret_key : Harness secret references, e.g.
+#                             <+secrets.getValue("account.s3_artifacts_read_access_key")>
+#                             (use a READ-ONLY IAM user scoped to the artifact prefixes)
+#   region, bucket
+#   source : folder in the bucket to download, e.g. payments/build_api/142
+#   target : folder in the workspace, e.g. artifacts  (lands in /harness/artifacts)
+#
+# This plugin reads keys from secrets; it does not use the AWS connector.
+template:
+  name: S3 Download Artifact
+  identifier: S3_Download_Artifact
+  versionLabel: 1.0.0
+  type: Step
+  description: Downloads a folder from S3 into the build workspace using the plugins/s3 image.
+  tags: {}
+  spec:
+    type: Plugin
+    timeout: 10m
+    spec:
+      connectorRef: account.harness.Image
+      image: plugins/s3
+      settings:
+        access_key: <+input>
+        secret_key: <+input>
+        region: <+input>
+        bucket: <+input>
+        source: <+input>
+        target: <+input>
+        download: "true"

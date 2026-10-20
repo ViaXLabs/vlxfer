@@ -1,0 +1,154 @@
+# Two example pipelines (two YAML documents in one file) showing how other pipelines
+# use the account-level templates. Replace the YOUR_* values and the placeholder
+# connector and secret identifiers.
+#
+# Org-level templates are referenced as  org.S3_Upload_Artifact
+# Account-level templates are referenced as  account.S3_Upload_Artifact
+#
+# Pipeline 1 (build_api): builds, uploads to S3, then a second stage downloads it again.
+# Pipeline 2 (deploy_api): a different pipeline that downloads build_api's output by run number.
+
+pipeline:
+  name: build-api
+  identifier: build_api
+  projectIdentifier: payments
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: YOUR_CODEBASE_CONNECTOR_ID
+        repoName: YOUR_REPO_NAME
+        build: <+input>
+  stages:
+    - stage:
+        name: build
+        identifier: build
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: package
+                  identifier: package
+                  spec:
+                    shell: Bash
+                    command: |-
+                      # Replace with your real build. The upload step does not compress.
+                      mkdir -p build
+                      echo "built by run <+pipeline.sequenceId>" > build/info.txt
+                      tar -czf app.tar.gz build/
+              - step:
+                  name: upload to S3
+                  identifier: upload_to_s3
+                  template:
+                    templateRef: account.S3_Upload_Artifact
+                    versionLabel: 1.0.0
+                    templateInputs:
+                      type: S3Upload
+                      spec:
+                        connectorRef: account.YOUR_AWS_CONNECTOR_ID
+                        region: us-east-1
+                        bucket: YOUR_ARTIFACT_BUCKET
+                        sourcePath: app.tar.gz
+    - stage:
+        name: verify
+        identifier: verify
+        type: CI
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  name: download from S3
+                  identifier: download_from_s3
+                  template:
+                    templateRef: account.S3_Download_Artifact
+                    versionLabel: 1.0.0
+                    templateInputs:
+                      type: Plugin
+                      spec:
+                        settings:
+                          access_key: <+secrets.getValue("account.s3_artifacts_read_access_key")>
+                          secret_key: <+secrets.getValue("account.s3_artifacts_read_secret_key")>
+                          region: us-east-1
+                          bucket: YOUR_ARTIFACT_BUCKET
+                          # Same pipeline: rebuild the exact key the upload step wrote.
+                          source: <+project.identifier>/<+pipeline.identifier>/<+pipeline.sequenceId>
+                          target: artifacts
+              - step:
+                  type: Run
+                  name: list downloaded files
+                  identifier: list_downloaded_files
+                  spec:
+                    shell: Bash
+                    command: ls -R /harness/artifacts
+---
+pipeline:
+  name: deploy-api
+  identifier: deploy_api
+  projectIdentifier: payments
+  orgIdentifier: default
+  tags: {}
+  variables:
+    - name: BUILD_RUN
+      type: String
+      description: Run number of the build_api pipeline whose artifact to use
+      required: true
+      value: <+input>
+  stages:
+    - stage:
+        name: fetch artifact
+        identifier: fetch_artifact
+        type: CI
+        spec:
+          cloneCodebase: false
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  name: download from S3
+                  identifier: download_from_s3
+                  template:
+                    templateRef: account.S3_Download_Artifact
+                    versionLabel: 1.0.0
+                    templateInputs:
+                      type: Plugin
+                      spec:
+                        settings:
+                          access_key: <+secrets.getValue("account.s3_artifacts_read_access_key")>
+                          secret_key: <+secrets.getValue("account.s3_artifacts_read_secret_key")>
+                          region: us-east-1
+                          bucket: YOUR_ARTIFACT_BUCKET
+                          # Different pipeline: use the PRODUCER's identifier and the run number passed in.
+                          # <+pipeline.sequenceId> here would be deploy_api's own number, not build_api's.
+                          source: <+project.identifier>/build_api/<+pipeline.variables.BUILD_RUN>
+                          target: artifacts
+              - step:
+                  type: Run
+                  name: use the artifact
+                  identifier: use_the_artifact
+                  spec:
+                    shell: Bash
+                    command: |-
+                      ls -R /harness/artifacts
+                      # tar -xzf /harness/artifacts/app.tar.gz   # adjust path after checking the real layout
