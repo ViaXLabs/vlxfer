@@ -35,3 +35,69 @@ This is the interface behind every Hibernate proxy. It has a method that retriev
 - The Jakarta Persistence spec and Javadoc for `jakarta.persistence.FetchType` and `@ManyToOne`. The spec treats `LAZY` as a hint that the provider may ignore, while Hibernate honors it through proxies.
 
 If you meant something different by "doc form," like a Word or Google doc summarizing this, let me know and I can put it together.~~~~
+
+
+
+-----
+
+
+**Oracle/Java docs**
+
+- FetchType (Java EE 6): https://docs.oracle.com/javaee/6/api/javax/persistence/FetchType.html
+- FetchType (Java EE 5): https://docs.oracle.com/javaee/5/api/javax/persistence/FetchType.html
+
+These docs say that LAZY is only a hint to the persistence provider that data should be fetched when first accessed, and the implementation is allowed to fetch it eagerly anyway. They also say that EAGER is a hard requirement.
+
+**The Oracle/Java docs don't guarantee that `getId()` skips the load.** That behavior is Hibernate's, from the `LazyInitializer` Javadoc I linked earlier. The Java spec only covers the lazy hint. So the "no query on `getId()`" part depends on you using Hibernate as the JPA provider.
+
+**Example to run on your data**
+
+Swap in your own entities. Turn on `hibernate.show_sql=true` so you can see exactly when SQL fires.
+
+```java
+@Entity
+class Customer {                       // "B"
+    @Id private UUID id;
+    private String name;
+    public UUID getId() { return id; }
+    public String getName() { return name; }
+}
+
+@Entity
+class Orders {                         // "A"
+    @Id private UUID id;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id")
+    private Customer customer;
+    public Customer getCustomer() { return customer; }
+}
+
+try (Session s = sessionFactory.openSession()) {
+    Orders o = s.find(Orders.class, orderId);          // SQL #1: orders only
+    Customer c = o.getCustomer();
+
+    System.out.println("proxy: " + (c instanceof HibernateProxy));
+    System.out.println("loaded before: " + Hibernate.isInitialized(c));
+
+    System.out.println("id: " + c.getId());            // should fire no SQL
+    System.out.println("loaded after getId: " + Hibernate.isInitialized(c));
+
+    System.out.println("name: " + c.getName());        // SQL #2: customer
+    System.out.println("loaded after getName: " + Hibernate.isInitialized(c));
+}
+```
+
+**What you should see if it works as described**
+
+```
+Hibernate: select ... from orders where id=?
+proxy: true
+loaded before: false
+id: <the uuid>
+loaded after getId: false
+Hibernate: select ... from customer where id=?
+name: <the name>
+loaded after getName: true
+```
+
+**I can't give you real results.** I have no access to your database, and my sandbox has no network to pull Hibernate. The output above is what the docs predict, not something I ran. Paste your actual output here and I'll help read it. If you see a `customer` SELECT right after the orders query, check that `fetch = LAZY` is set and that JPA proxy compliance isn't turned on.~~~~
